@@ -3,7 +3,7 @@
    Plugin Name: Daily Stat
    Plugin URI: http://additifstabac.webuda.com/index.php/daily-stat-new-statistics-wordpress-plugin/
    Description: Improved real time stats for your blog
-   Version: 1.5.0.1
+   Version: 1.5.1
    Author: luciole135
    Author URI: http://additifstabac.webuda.com/index.php/daily-stat-new-statistics-wordpress-plugin/
 */
@@ -45,7 +45,7 @@ if (($DailyStat_Option['DailyStat_Use_GeoIP'] == 'checked') && (!class_exists('g
 	
 	
 	// call the custom function on the init hook
-	add_action('plugins_loaded', 'widget_dailystat_init');
+	add_action('plugins_loaded', 'DailyStat_Widget_init');
 	add_action('send_headers', 'luc_StatAppend');
 				 
 function DailyStat_activate() 
@@ -104,7 +104,7 @@ function DailyStat_remove_action()
 {		global $DailyStat_Option;
 		// Remove all the hook
 		// general hooks
-		remove_action('plugins_loaded','widget_dailystat_init');
+		remove_action('plugins_loaded','DailyStat_Widget_init');
 		remove_action('init', 'dailystat_load_textdomain');
         remove_action('admin_menu', 'luc_add_pages');
 	    remove_action('admin_init', 'DailyStat_admin_init');
@@ -198,19 +198,6 @@ function luc_StatAppend()
           $referrer = (isset($_SERVER['HTTP_REFERER']) ? htmlentities($_SERVER['HTTP_REFERER']) : '');
           $userAgent = (isset($_SERVER['HTTP_USER_AGENT']) ? htmlentities($_SERVER['HTTP_USER_AGENT']) : '');
           $spider = luc_GetSpider($userAgent);
-		  $spambot = luc_CheckSpamBot($userAgent);
-
-		if (($spambot !== null) or ($userAgent == ''))
-			{
-			if ($DailyStat_Option['DailyStat_Dont_Collect_SpamBot'] == 'checked')
-				{if ($userAgent != '')
-					return ''; // It is a spambot either way, don't log it
-				 elseif (($userAgent == '') and ($DailyStat_Option['DailyStat_Dont_Collect_BlankUA'] == 'checked'))
-					return ''; //  It is a blank UA and we are treating it as a spamnbot
-				}
-			else
-				$spider = ((stripos($spambot, 'Spam Bot') > 0) ? $spambot: $spambot . ' Spam Bot');
-			}
           
           if (($spider != '') and ($DailyStat_Option['DailyStat_Dont_Collect_Spider'] == 'checked'))
               return '';
@@ -256,7 +243,7 @@ function luc_StatAppend()
 			   $results  = $wpdb->query('OPTIMIZE TABLE '. $table_name); 
 		    }
               
-          if ((!is_user_logged_in()) or ($DailyStat_Option['DailyStat_Dont_Collect_Logged_User'] != 'checked'))
+          if ((!is_user_logged_in()) or (($DailyStat_Option['DailyStat_Dont_Collect_Logged_User'] != 'checked')) or($DailyStat_Option['DailyStat_Dont_Collect_Logged_User'] == 'checked')and (!current_user_can($DailyStat_Option['DailyStat_Dont_Collect_Logged_User_MinPermit'])))
           {
              $result = $wpdb->insert($table_name, array(
 					'date' => $vdate, 
@@ -301,7 +288,7 @@ function luc_get_ip()
 
 function luc_ip_not_private($ip)
 {
-	if(filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_RES_RANGE))
+	if(filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE|FILTER_FLAG_NO_RES_RANGE))
 		return true;
 	return false;
 }
@@ -364,22 +351,6 @@ function luc_ip_not_private($ip)
           }
           return false;
       }
-
-	  function luc_CheckSpamBot($agent = null)
-		{
-		$agent = str_replace(" ", "", $agent);
-		$key = null;
-		$lines = file(DAILYSTAT_PLUGIN_PATH . '/def/spambot.dat');
-		foreach ($lines as $line_num => $spambot)
-			{
-			list ($name, $key) = explode("|", $spambot);
-			if (stripos($agent, $key) === false)
-				continue;
-			return $name;
-			}
-		return null;
-		}
-
 	  
       function luc_GetSE($referrer = null)
       {
@@ -540,112 +511,212 @@ function luc_ip_not_private($ip)
           
           return $body;
       }
-      
-      function luc_dailystat_TopPosts($limit = 5, $showcounts = 'checked')
-      {
-          global $wpdb;
-		  $table_name = DAILYSTAT_TABLE_NAME;
-          $res = "\n<ul>\n";
-          
-          $qry = $wpdb->get_results("SELECT urlrequested,count(*) as totale FROM $table_name WHERE spider='' AND feed='' GROUP BY urlrequested ORDER BY totale DESC LIMIT $limit;");
-          foreach ($qry as $rk)
-          {
-              $res .= "<li><a href='" . luc_getblogurl() . ((strpos($rk->urlrequested, 'index.php') === FALSE) ? $rk->urlrequested : '') . "'>" . luc_post_title_Decode($rk->urlrequested) . "</a></li>\n";
-              if (strtolower($showcounts) == 'checked')
-              {
-                  $res .= " (" . $rk->totale . ")";
-              }
-          }
-          return "$res</ul>\n";
-      }
-      
-      function widget_dailystat_init($args)
-      {
-          if (!function_exists('register_sidebar_widget') || !function_exists('register_widget_control'))
-              return;
-          // Multifunctional dailystat pluging
-          function widget_dailystat_control()
-          {
-              $options = get_option('widget_dailystat');
-              if (!is_array($options))
-                  $options = array('title' => 'dailystat', 'body' => 'Visitors today: %visitorstoday%');
-              if ($_POST['dailystat-submit'])
-              {
-                  $options['title'] = strip_tags(stripslashes($_POST['dailystat-title']));
-                  $options['body'] = stripslashes($_POST['dailystat-body']);
-				  
-                  $DailyStat_Option['DailyStat_Widget'] = $options;
-				  update_option('DailyStat_Option', $DailyStat_Option);
-              }
-              $title = htmlspecialchars($options['title'], ENT_QUOTES);
-              $body = htmlspecialchars($options['body'], ENT_QUOTES);
-              // the form
-              echo '<p style="text-align:right;"><label for="dailystat-title">' . __('Title:') . ' <input style="width: 250px;" id="dailystat-title" name="dailystat-title" type="text" value="' . $title . '" /></label></p>';
-              echo '<p style="text-align:right;"><label for="dailystat-body"><div>' . __('Body:', 'widgets') . '</div><textarea style="width: 288px;height:100px;" id="dailystat-body" name="dailystat-body" type="textarea">' . $body . '</textarea></label></p>';
-              echo '<input type="hidden" id="dailystat-submit" name="dailystat-submit" value="1" /><div style="font-size:7pt;">%today% %visitorsyesterday% %visitorstoday% %pageviewstoday% %pageviewsyesterday% %thistodaypageview% %thisyesterdaypageviews% %thistodayvisitors% %thisyesterdayvisitors% %os% %browser% %ip% %visitorsonline% %usersonline% %toppost% %latesthits%
-                    %topbrowser% %topos% %pagestoday% %thistotalpages% %latesthits%</div>';
-          }
-		  
-       function widget_dailystat($args)
-          {
-              extract($args);
-              $options = get_option('widget_dailystat');
-              $title = $options['title'];
-              $body = $options['body'];
-              echo $before_widget;
-              print($before_title . $title . $after_title);
-              echo luc_dailystat_Vars($body);
-              echo $after_widget;
-          }
-          wp_register_sidebar_widget('dailystat', 'dailystat','widget_dailystat');
-          wp_register_widget_control('dailystat', 'dailystat','widget_dailystat_control');
-          
-          // Top posts
-          function widget_dailystattopposts_control()
-          {
-              $options = get_option('widget_dailystattopposts');
-              if (!is_array($options))
-              {
-                  $options = array('title' => 'dailystat TopPosts', 'howmany' => '5', 'showcounts' => 'checked');
-              }
-              if ($_POST['dailystattopposts-submit'])
-              {
-                  $options['title'] = strip_tags(stripslashes($_POST['dailystattopposts-title']));
-                  $options['howmany'] = stripslashes($_POST['dailystattopposts-howmany']);
-                  $options['showcounts'] = stripslashes($_POST['dailystattopposts-showcounts']);
-                  if ($options['showcounts'] == "1")
-                  {
-                      $options['showcounts'] = 'checked';
-                  }
-                  $DailyStat_Option['DailyStat_Widget_TopPosts'] = $options;
-				  update_option('DailyStat_Option', $DailyStat_Option);
-              }
-              $title = htmlspecialchars($options['title'], ENT_QUOTES);
-              $howmany = htmlspecialchars($options['howmany'], ENT_QUOTES);
-              $showcounts = htmlspecialchars($options['showcounts'], ENT_QUOTES);
-              // the form
-              echo '<p style="text-align:right;"><label for="dailystattopposts-title">' . __('Title', 'dailystat') . ' <input style="width: 250px;" id="dailystat-title" name="dailystattopposts-title" type="text" value="' . $title . '" /></label></p>';
-              echo '<p style="text-align:right;"><label for="dailystattopposts-howmany">' . __('Limit results to', 'dailystat') . ' <input style="width: 100px;" id="dailystattopposts-howmany" name="dailystattopposts-howmany" type="text" value="' . $howmany . '" /></label></p>';
-              echo '<p style="text-align:right;"><label for="dailystattopposts-showcounts">' . __('Visits', 'dailystat') . ' <input id="dailystattopposts-showcounts" name="dailystattopposts-showcounts" type=checkbox value="checked" ' . $showcounts . ' /></label></p>';
-              echo '<input type="hidden" id="dailystat-submitTopPosts" name="dailystattopposts-submit" value="1" />';
-          }
-		  
-     function widget_dailystattopposts($args)
-          {
-              extract($args);
-              $options = get_option('widget_dailystattopposts');
-              $title = htmlspecialchars($options['title'], ENT_QUOTES);
-              $howmany = htmlspecialchars($options['howmany'], ENT_QUOTES);
-              $showcounts = htmlspecialchars($options['showcounts'], ENT_QUOTES);
-              echo $before_widget;
-              print($before_title . $title . $after_title);
-              echo luc_dailystat_TopPosts($howmany, $showcounts);
-              echo $after_widget;
-          }
-          wp_register_sidebar_widget('dailystatTopPosts', 'dailystat TopPosts','widget_dailystattopposts');
-          wp_register_widget_control('dailystatTopPosts','dailystat TopPosts', 'widget_dailystattopposts_control');
-      }
-	  
+function DailyStat_Widget_init($args)
+{	  
+	function DailyStat_Widget_control()
+{
+	global $DailyStat_Option;
+
+	$options = $DailyStat_Option['DailyStat_Widget'];
+	if (!is_array($options))
+		$options = array (
+			'title' => 'Visitor Stats',
+			'body' => 'Today : %today%'
+		);
+	if ($_POST['DailyStat-submit'])
+	{
+		$options['title'] = strip_tags(stripslashes($_POST['DailyStat-title']));
+		$options['body'] = stripslashes($_POST['DailyStat-body']);
+
+		$DailyStat_Option['DailyStat_Widget'] = $options;
+		update_option('DailyStat_Option', $DailyStat_Option);
+	}
+	$title = htmlspecialchars($options['title'], ENT_QUOTES);
+	$body = htmlspecialchars($options['body'], ENT_QUOTES);
+	// the form
+	?>
+	<p style="text-align:left;">
+		<label for="DailyStat-title"><?php _e(__('Title:')) ?> <br>
+		<input style="width:100%;" id="DailyStat-title" name="DailyStat-title" type="text" value="<?php _e($title) ?>" />
+		</label>
+	</p>
+	<p style="text-align:right;">
+		<label for="DailyStat-body"><div><?php _e(__('Body:', 'widgets')) ?> </div> <br>
+		<textarea style="width:100%;height:100px;" id="DailyStat-body" name="DailyStat-body" type="textarea"><?php _e($body) ?></textarea>
+		</label>
+	</p>
+	<input type="hidden" id="DailyStat-submit" name="DailyStat-submit" value="1" />
+
+	<strong>Available Macros:</strong>
+	<div style="font-size:7pt;"> %today% %visitorstoday% %visitorsyesterday% %pageviewstoday% %pageviewsyesterday% %thistodaypageviews% %thisyesterdaypageviews% %thistodayvisitors% %thisyesterdayvisitors% %os% %browser% %ip% %visitorsonline% %usersonline% %toppost% %latesthits% %topbrowser% %topos% %pagestoday% %thistotalpages% %latesthits%</div>
+	<?php
+}
+
+function DailyStat_Widget($args)
+{
+	global $DailyStat_Option;
+
+	extract($args);
+	$options = $DailyStat_Option['DailyStat_Widget'];
+	$title = $options['title'];
+	$body = $options['body'];
+	echo $before_widget;
+	echo ($before_title . $title . $after_title);
+	echo luc_DailyStat_Vars($body);
+	echo $after_widget;
+}
+
+
+// Top posts
+function DailyStat_Widget_TopPosts_control()
+{
+	global $DailyStat_Option;
+
+	$options = $DailyStat_Option['DailyStat_Widget_TopPosts'];
+	if (!is_array($options))
+	{
+		$options = array (
+			'title' => 'DailyStat Visitors Top Posts',
+			'howmany' => '5',
+			'howlong' => '0',
+			'showcounts' => 'checked',
+			'showpages' => 'checked'
+		);
+	}
+	if ($_POST['DailyStattopposts-submit'])
+	{
+		$options['title'] = strip_tags(stripslashes($_POST['DailyStattopposts-title']));
+		$options['howmany'] = stripslashes($_POST['DailyStattopposts-howmany']);
+		$options['howlong'] = stripslashes($_POST['DailyStattopposts-howlong']);
+		$options['showcounts'] = stripslashes($_POST['DailyStattopposts-showcounts']);
+		if ($options['showcounts'] == "1")
+		{
+			$options['showcounts'] = 'checked';
+		}
+		$options['showpages'] = stripslashes($_POST['DailyStattopposts-showpages']);
+		if ($options['showpages'] == "1")
+		{
+			$options['showpages'] = 'checked';
+		}
+		$DailyStat_Option['DailyStat_Widget_TopPosts'] = $options;
+		update_option('DailyStat_Option', $DailyStat_Option);
+	}
+	$title = htmlspecialchars($options['title'], ENT_QUOTES);
+	$howmany = htmlspecialchars($options['howmany'], ENT_QUOTES);
+	$howlong = htmlspecialchars($options['howlong'], ENT_QUOTES);
+	$showcounts = htmlspecialchars($options['showcounts'], ENT_QUOTES);
+	$showpages = htmlspecialchars($options['showpages'], ENT_QUOTES);
+	// the form
+	?>
+	<p style="text-align:left;">
+		<label for="DailyStattopposts-title"><?php _e(__('Title:', 'DailyStat')) ?>
+		<input style="width:100%;" id="statpress-title" name="DailyStattopposts-title" type="text" value="<?php _e($title) ?>" />
+		</label>
+	</p>
+	<p style="text-align:left;">
+		<label for="DailyStattopposts-howmany"><?php _e(__('Limit results to:', 'DailyStat')) ?>
+		<input style="width:40px; align:right;" id="DailyStattopposts-howmany" name="DailyStattopposts-howmany" type="text" value="<?php _e($howmany) ?>" />
+		</label>
+	</p>
+
+
+	<p style="text-align:left;">
+		<label for="DailyStattopposts-howlong"><?php _e(__('Include # days (0 for all):', 'DailyStat')) ?>
+		<input style="width:40px; align:right" id="DailyStattopposts-howlong" name="DailyStattopposts-howlong" type="text" value="<?php _e($howlong ) ?>" />
+		</label>
+	</p>
+	<p style="text-align:right;">
+		<label for="DailyStattopposts-showcounts"><?php _e(__('Visits', 'DailyStat')) ?>
+		<input id="DailyStattopposts-showcounts" name="DailyStattopposts-showcounts" type=checkbox value="checked" <?php _e($showcounts) ?> />
+		</label>
+	</p>
+	<p style="text-align:right;">
+		<label for="DailyStattopposts-showpages"><?php _e(__('Include Pages', 'DailyStat')) ?>
+		<input id="DailyStattopposts-showpages" name="DailyStattopposts-showpages" type=checkbox value="checked" <?php _e($showpages) ?> />
+		</label>
+	</p>
+	<input type="hidden" id="statpress-submitTopPosts" name="DailyStattopposts-submit" value="1" />
+	<?php
+}
+
+function DailyStat_Widget_TopPosts($args)
+{
+	global $DailyStat_Option;
+
+	extract($args);
+	$options = $DailyStat_Option['DailyStat_Widget_TopPosts'];
+	$title = htmlspecialchars($options['title'], ENT_QUOTES);
+	$howmany = htmlspecialchars($options['howmany'], ENT_QUOTES);
+	$howlong = htmlspecialchars($options['howlong'], ENT_QUOTES);
+	$showcounts = htmlspecialchars($options['showcounts'], ENT_QUOTES);
+	$showpages = htmlspecialchars($options['showpages'], ENT_QUOTES);
+	echo $before_widget;
+	echo ($before_title . $title . $after_title);
+	echo luc_DailyStat_TopPosts($howmany, $howlong, $showcounts, $showpages);
+	echo $after_widget;
+}
+
+function luc_DailyStat_TopPosts($limit = 5, $numdays = 0, $showcounts = 'checked', $showpages = 'checked')
+{
+	global $wpdb;
+	$table_name = DAILYSTAT_TABLE_NAME;
+	$res = "\n<ul>\n";
+	
+	if ($numdays == 0)
+	{ // All dates chosen, default to epoch
+		$stopdate = date('Ymd', strtotime('1970-01-01'));
+	}
+	else
+		if ($numdays < 0)
+		{ // Negative number of days, no change
+			$stopdate = date('Ymd', strtotime($numdays . 'days'));
+		}
+		else
+		{ // Invert sign
+			$numdays = $numdays * -1;
+			$stopdate = date('Ymd', strtotime($numdays . 'days'));
+		}
+
+	if (strtolower($showpages) == 'checked')
+		$type = "(post_type = 'page' OR post_type = 'post')";
+	else
+		$type = "post_type = 'post'";
+
+	$qry_s = "SELECT post_name, COUNT(*) as total, urlrequested
+						FROM $wpdb->posts as p
+						JOIN $table_name as t
+						ON urlrequested LIKE CONCAT('%', p.post_name, '_' )
+						WHERE post_status = 'publish'
+							AND $type
+							AND spider=''
+							AND feed=''
+							AND date >= $stopdate
+						GROUP BY post_name
+						ORDER BY total DESC LIMIT $limit;";
+
+	$qry = $wpdb->get_results($qry_s);
+
+	foreach ($qry as $rk)
+	{
+		$res .= "<li><a href='" .
+		luc_GetBlogURL() .
+		 ((strpos($rk->urlrequested, 'index.php') === FALSE) ? $rk->urlrequested : '') .
+		"'>" . luc_post_title_Decode($rk->post_name) . "</a>";
+		if (strtolower($showcounts) == 'checked')
+		{
+			$res .= " (" . $rk->total . ")</li>";
+		}
+	}
+	return "$res</ul>\n";
+}
+
+	wp_register_sidebar_widget('DailyStat', 'DailyStat Stats Macros', 'DailyStat_Widget', array('description' => 'Show a off your statistics in a widget'));
+	wp_register_widget_control('DailyStat', 'DailyStat Stats Macros', 'DailyStat_Widget_control');
+
+	wp_register_sidebar_widget('DailyStatTopPosts', 'DailyStat V Top Posts', 'DailyStat_Widget_TopPosts', array('description' => 'Show a configurable list of your most popular posts & pages'));
+	wp_register_widget_control('DailyStatTopPosts', 'DailyStat V Top Posts', 'DailyStat_Widget_TopPosts_control');
+}
+  
 function permalinksEnabled()
 {	global $wpdb;
       

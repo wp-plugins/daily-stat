@@ -100,6 +100,7 @@ function luc_Options()
 
 		// Data Collection and Retention
 		$DailyStat_Option['DailyStat_Dont_Collect_Logged_User'] = (isset($_POST['DailyStat_Dont_Collect_Logged_User']) ? $_POST['DailyStat_Dont_Collect_Logged_User'] : '');
+		$DailyStat_Option['DailyStat_Dont_Collect_Logged_User_MinPermit'] = (isset($_POST['DailyStat_Dont_Collect_Logged_User_MinPermit']) ? $_POST['DailyStat_Dont_Collect_Logged_User_MinPermit'] : '');
 		$DailyStat_Option['DailyStat_Dont_Collect_Spider'] = (isset($_POST['DailyStat_Dont_Collect_Spider']) ? $_POST['DailyStat_Dont_Collect_Spider'] : '');
 
 		// Pages Options
@@ -143,8 +144,9 @@ function luc_Options()
 			<tbody>		
 		<tr><td colspan='2'><input type=checkbox name='DailyStat_Dont_Collect_Logged_User' id='DailyStat_Dont_Collect_Logged_User' value='checked' 
 		<?php echo $DailyStat_Option['DailyStat_Dont_Collect_Logged_User'] ?> >
-		<label for='DailyStat_Dont_Collect_Logged_User'>Do not collect data about logged users</label>
-		<br>
+		<label for='DailyStat_Dont_Collect_Logged_User'>Do not collect data about logged users who have at least these capability</label>
+		<select name="DailyStat_Dont_Collect_Logged_User_MinPermit"><?php luc_dropdown_caps($DailyStat_Option['DailyStat_Dont_Collect_Logged_User_MinPermit']); ?></select>
+		<a href="http://codex.wordpress.org/Roles_and_Capabilities" target='_blank'>more info</a><br>
 		<input type=checkbox name='DailyStat_Dont_Collect_Spider' id='DailyStat_Dont_Collect_Spider' value='checked' 
 		<?php echo $DailyStat_Option['DailyStat_Dont_Collect_Spider'] ?> >
 		<label for='DailyStat_Dont_Collect_Spider'>Do not collect spiders visits</label></td><td></td></tr>
@@ -285,14 +287,14 @@ function luc_main_table_latest_hits()
 			<th scope='col' width="40%">Page</th>
 			<th scope='col'>OS</th>
 			<th scope='col'>Browser</th>
-		<?php if ($DailyStat_Option['DailyStat_Dont_Collect_Logged_User'] != 'checked') echo "<th scope='col'>User</th>"; ?>
+		<?php if (($DailyStat_Option['DailyStat_Dont_Collect_Logged_User'] != 'checked') or (($DailyStat_Option['DailyStat_Dont_Collect_Logged_User'] == 'checked')and (current_user_can($DailyStat_Option['DailyStat_Dont_Collect_Logged_User_MinPermit'])))) echo "<th scope='col'>User</th>"; ?>
 			<th scope='col'>Feed</th>
 		</tr>
 		</thead>
 		<tbody>
 	<?php
 
-	$rks = $wpdb->get_results("SELECT date, time, ip,urlrequested, os, browser, language, country, post_title
+	$rks = $wpdb->get_results("SELECT date, time, ip,urlrequested, os, browser,feed,user, language, country, post_title
 			FROM $table_name
 			WHERE (os<>'' OR browser <>'')
 				AND spider NOT LIKE '%Spam Bot%'
@@ -313,8 +315,8 @@ function luc_main_table_latest_hits()
 				echo 
 					"<td>" . luc_HTML_IMG($rk->os, 'os', $text_OS) . "</td>
 					<td>" . luc_HTML_IMG($rk->browser, 'browser', $text_browser) . "</td>";
-		if ($DailyStat_Option['DailyStat_Dont_Collect_Logged_User'] != 'checked')
-			{echo ($rk->user != '') ? "<td>" . $rk->user . "</td>" : "<td>&nbsp;</td>";}
+		if (($DailyStat_Option['DailyStat_Dont_Collect_Logged_User'] != 'checked') or (($DailyStat_Option['DailyStat_Dont_Collect_Logged_User'] == 'checked')and (current_user_can($DailyStat_Option['DailyStat_Dont_Collect_Logged_User_MinPermit']))))
+			{echo (($rk->user != '') ? "<td>" .$rk->user. "</td>" : "<td>&nbsp;</td>");}
 		echo "	<td>" . luc_HTML_IMG($rk->feed, 'feed', false) . "</td>
 				</tr>";
 	}
@@ -699,12 +701,14 @@ function luc_main()
 			<li><strong><a href="#tabs-4">Latest Referrers</a></strong></li>
 			<li><strong><a href="#tabs-5">Latest Feeds</a></strong></li>
 			<?php
-	if ($StatPressV_Option['StatPressV_Dont_Collect_Spider'] =='')
+	if ($DailyStat_Option['DailyStat_Dont_Collect_Spider'] =='')
 	{ ?>
 			<li><strong><a href="#tabs-6">Latest Spiders</a></strong></li>
-			<li><strong><a href="#tabs-7">Latest Undefined Agents</a></strong></li>
+			<li><strong><a href="#tabs-7">Latest Spams Bots</a></strong></li>
+			
 		<?php
 	} ?>
+			<li><strong><a href="#tabs-8">Latest Undefined Agents</a></strong></li>
 			</ul>	
 	<!-- Latest Hits -->
 	
@@ -822,7 +826,7 @@ function luc_main()
 
 <!-- tab 6 -->
 	<?php
-	if ($StatPressV_Option['StatPressV_Dont_Collect_Spider'] == '')
+	if ($DailyStat_Option['DailyStat_Dont_Collect_Spider'] == '')
 	{
 	?>
 		<div id="tabs-6">
@@ -851,9 +855,36 @@ function luc_main()
 			</table>
 			<div id="latestspiders"> <?php luc_main_table_latest_spiders() ?> </div>
 		</div>
-
 <!-- tab 7 -->
 		<div id="tabs-7">
+			<table>
+				<form id='latestspambotsForm'>
+					<table>
+						<tr>
+							<td width=270px><h2>Latest Spambots</h2></td>
+							<td align='right'>
+								<select name='spambotsrows' id='spambotsrows'>
+									<option value='0'>Rows:</option>
+									<option value='5'>5</option>
+									<option value='10'>10</option>
+									<option value='25'>25</option>
+									<option value='50'>50</option>
+									<option value='100'>100</option>
+								</select>
+								<img src="<?php echo DAILYSTAT_PLUGIN_URL ?>/images/ajax-loader.gif" id="latestspambotsLoader" style="display: none;" />
+								<input type="hidden" name="action" value="table_latest_spambots" />
+							</td>
+						</tr>
+					</table>
+				</form>
+			</table>
+	<div id="latestspambots"> <?php luc_main_table_latest_spambots() ?> </div>
+	</div>
+<?php
+	}
+	?>
+<!-- tab 8 -->
+		<div id="tabs-8">
 			<table>
 				<form id='latestundefagentsForm'>
 					<table>
@@ -879,9 +910,7 @@ function luc_main()
 			</table>
 			<div id="latestundefagents"> <?php luc_main_table_latest_undefagents() ?> </div>
 		</div>
-	<?php
-	}
-	?>
+	
 	</div> <!-- End tabbed div -->
 	
 	<!-- end of the tab -->
@@ -1059,8 +1088,7 @@ function luc_dailystat_url_monitoring()
 				
 	$NumPage = ceil($Num / $querylimit);
 
-	echo "<div class='wrap'><h2>" . __('URL Monitoring', 'statpress') . "</h2>
-	       </br> This page is designed to help you secure your website: <DIV title='Indeed this page shows all URLs that have access to your website or your blog and who are not posts or articles written by an author of your website.Some are legitimate as /category or the robots like Google. Nevertheless, they are all shown so you can secure your blog or your site by selecting the ones you want to block access to your site.'>Learn more</DIV>";
+	echo "<div class='wrap'><h2>" . __('URL Monitoring', 'statpress') . "</h2></br> This page is designed to help you secure your website: <DIV title='Indeed this page shows all URLs that have access to your website or your blog and who are not posts or articles written by an author of your website.Some are legitimate as /category or the robots like Google. Nevertheless, they are all shown so you can secure your blog or your site by selecting the ones you want to block access to your site.'>Learn more</DIV>";
 	luc_print_pa_link ($NumPage,$pa,$action);
 	$LimitValue = ($pa * $querylimit) - $querylimit;
 	?>
@@ -1343,7 +1371,7 @@ document.getElementById(thediv).style.display="none"
       }
 	    
 function luc_yesterday()
-{	//$start = microtime(true);
+{	$start = microtime(true);
 	global $wpdb;
 	global $DailyStat_Option;
 	$table_name = DAILYSTAT_TABLE_NAME;
@@ -1359,24 +1387,25 @@ function luc_yesterday()
 	$pa = luc_page_posts();
 	$permalink = luc_permalink();
 
-	$strqry = "SELECT post_title,post_name,post_type
-				FROM $wpdb->posts
-				WHERE post_status = 'publish'
-					AND (post_type = 'page' OR post_type = 'post')
-					AND  DATE_FORMAT(post_date_gmt, '%Y%m%d') <= $yesterday;";
-					
-	$qry_posts = $wpdb->get_results($strqry);
-	$NumberPosts = $wpdb->num_rows;
+$sql_posts_pages = "SELECT post_date_gmt,post_title,post_name,post_type 
+			FROM $wpdb->posts 
+			WHERE post_status = 'publish' 
+				AND (post_type = 'page' OR post_type = 'post')
+				AND DATE_FORMAT(post_date_gmt, '%Y%m%d') <= $yesterday;";
+	
+	// Get all posts and pages
+	$qry_posts_pages = $wpdb->get_results($sql_posts_pages);	
+	$total_posts_pages = $wpdb->num_rows;
 					
 	$NumberDisplayPost = 100;
-	$NA = ceil($NumberPosts / $NumberDisplayPost);
+	$NA = ceil($total_posts_pages / $NumberDisplayPost);
 	$LimitValueArticles = ($pa-1) * $NumberDisplayPost;
 
-	// Initialisation of the count for each page and post
-	foreach ($qry_posts as $p)
+	
+	foreach ($qry_posts_pages as $p)
 	{	$posts[$p->post_name]['post_name'] = $p->post_name;
 		$posts[$p->post_name]['post_title'] = $p->post_title;
-		$posts[$p->post_type]['post_type'] = $p->post_type;
+		$posts[$p->post_name]['post_type'] = $p->post_type;
 		$posts[$p->post_name]['visitors'] = NULL;
 		$posts[$p->post_name]['visitors_feeds'] = NULL;
 		$posts[$p->post_name]['pageviews'] = NULL;
@@ -1384,7 +1413,7 @@ function luc_yesterday()
 		$posts[$p->post_name]['spiders'] = NULL;
 	}	
 		$posts['page_accueil']['post_name'] = 'page_accueil';
-		$posts['page_accueil']['post_title'] = '[page]: Home ';
+		$posts['page_accueil']['post_title'] = 'Home';
 		$posts['page_accueil']['post_type'] = 'page';
 		$posts['page_accueil']['visitors'] = NULL;
 		$posts['page_accueil']['visitors_feeds'] = NULL;
@@ -1393,20 +1422,20 @@ function luc_yesterday()
 		$posts['page_accueil']['spiders'] = NULL;
 		
 	
-	$qry_visitors = requete_yesterday("DISTINCT ip", "urlrequested = ''", "spider = '' AND feed = ''", $yesterday);
+	$qry_visitors = requete_day("DISTINCT ip", "urlrequested = ''", "spider = '' AND feed = ''", $yesterday);
 	foreach ($qry_visitors as $p)
 	{
 		$posts[$p->post_name]['visitors'] = $p->total;
 		$total_visitors += $p->total;
 	}
-
-	$qry_visitors_feeds = requete_yesterday("DISTINCT ip", "(urlrequested LIKE '%" . $permalink . "feed%' OR urlrequested LIKE '%" . $permalink . "comment%') ", "spider='' AND feed<>''", $yesterday);
+	
+	$qry_visitors_feeds = requete_day("DISTINCT ip", "(urlrequested LIKE '%" . $permalink . "feed%' OR urlrequested LIKE '%" . $permalink . "comment%') ", "spider='' AND feed<>''", $yesterday);
 	foreach ($qry_visitors_feeds as $p)
 	{
 		$posts[$p->post_name]['visitors_feeds'] = $p->total;
 		$total_visitors_feeds += $p->total;
 	}
-	$qry_pageviews = requete_yesterday("ip", "urlrequested = ''", "spider = '' AND feed = ''", $yesterday);
+	$qry_pageviews = requete_day("ip", "urlrequested = ''", "spider = '' AND feed = ''", $yesterday);
 	
 	foreach ($qry_pageviews as $p)
 	{
@@ -1414,17 +1443,17 @@ function luc_yesterday()
 		$total_pageviews += $p->total;
 	}
 
-	$qry_pageviews_feeds = requete_yesterday("ip", "(urlrequested LIKE '%" . $permalink . "feed%' OR urlrequested LIKE '%" . $permalink . "comment%')", " spider='' AND feed<>''", $yesterday);
+	$qry_pageviews_feeds = requete_day("ip", "(urlrequested LIKE '%" . $permalink . "feed%' OR urlrequested LIKE '%" . $permalink . "comment%')", " spider='' AND feed<>''", $yesterday);
 	foreach ($qry_pageviews_feeds as $p)
 	{	
 		$posts[$p->post_name]['pageviews_feeds'] = $p->total;
 		$total_pageviews_feeds += $p->total;
 	}
 
-	//$spider = $DailyStat_Option['DailyStat_Dont_Collect_Spider'];
-	if ($DailyStat_Option['DailyStat_Dont_Collect_Spider'] == '')
+	$spider = $DailyStat_Option['DailyStat_Dont_Collect_Spider'];
+	if ($spider == '')
 	{
-		$qry_spiders = requete_yesterday("ip", "urlrequested=''", "spider<>'' AND feed=''", $yesterday);
+		$qry_spiders = requete_day("ip", "urlrequested=''", "spider<>'' AND feed=''", $yesterday);
 		foreach ($qry_spiders as $p)
 		{	
 			$posts[$p->post_name]['spiders'] = $p->total;
@@ -1437,15 +1466,15 @@ function luc_yesterday()
 			WHERE feed=''
 				AND spider=''
 				AND date = $yesterday ;");
-				
+			
 	$total_visitors_feeds = $wpdb->get_var("SELECT count(DISTINCT ip) as total
 			FROM $table_name
 			WHERE feed<>''
 				AND spider=''
 				AND date = $yesterday ;");
 				
-	echo "<div class='wrap'><h2>" . __('Yesterday ', 'DailyStat') . gmdate('d M, Y', current_time('timestamp') - 86400) . "</div></br>";
-echo "<strong>"; _e(" (" . $NumberPosts . " posts/pages)");echo" </strong>";
+	echo "<strong>"; _e("Displaying report for " . gmdate('d M, Y', strtotime($yesterday)) . " (" . $total_posts_pages . " posts/pages)");echo" </strong>";
+
 	luc_print_pa_link ($NA,$pa,$action);
 	
     // Sort the results by total
@@ -1453,32 +1482,31 @@ echo "<strong>"; _e(" (" . $NumberPosts . " posts/pages)");echo" </strong>";
 	
 	echo "<table class='widefat'>
 	<thead><tr>
-	<th scope='col'>" . __('URL', 'DailyStat') . "</th>
-	<th scope='col'><div style='background:$visitors_color;width:10px;height:10px;float:left;margin-top:4px;margin-right:5px;'></div>" . __('Visitors', 'DailyStat') . "<br /><font size=1></font></th>
-	<th scope='col'><div style='background:$rss_visitors_color;width:10px;height:10px;float:left;margin-top:4px;margin-right:5px;'></div>" . __('Visitors Feeds', 'DailyStat') . "<br /><font size=1></font></th>
-	<th scope='col'><div style='background:$pageviews_color;width:10px;height:10px;float:left;margin-top:4px;margin-right:5px;'></div>" . __('Views', 'DailyStat') . "<br /><font size=1></font></th>
-	<th scope='col'><div style='background:$rss_pageviews_color;width:10px;height:10px;float:left;margin-top:4px;margin-right:5px;'></div>" . __('Views Feeds', 'DailyStat') . "<br /><font size=1></font></th>";
+	<th scope='col'>" . __('URL', 'statpressV') . "</th>
+	<th scope='col'><div style='background:$visitors_color;width:10px;height:10px;float:left;margin-top:4px;margin-right:5px;'></div>" . __('Visitors', 'statpressV') . "<br /><font size=1></font></th>
+	<th scope='col'><div style='background:$rss_visitors_color;width:10px;height:10px;float:left;margin-top:4px;margin-right:5px;'></div>" . __('Visitors Feeds', 'statpressV') . "<br /><font size=1></font></th>
+	<th scope='col'><div style='background:$pageviews_color;width:10px;height:10px;float:left;margin-top:4px;margin-right:5px;'></div>" . __('Views', 'statpressV') . "<br /><font size=1></font></th>
+	<th scope='col'><div style='background:$rss_pageviews_color;width:10px;height:10px;float:left;margin-top:4px;margin-right:5px;'></div>" . __('Views Feeds', 'statpressV') . "<br /><font size=1></font></th>";
 	if ($spider == '')
-		echo "<th scope='col'><div style='background:$spider_color;width:10px;height:10px;float:left;margin-top:4px;margin-right:5px;'></div>" . __('Spider', 'DailyStat') . "<br /><font size=1></font></th>";
+		echo "<th scope='col'><div style='background:$spider_color;width:10px;height:10px;float:left;margin-top:4px;margin-right:5px;'></div>" . __('Spider', 'statpressV') . "<br /><font size=1></font></th>";
 	echo "</tr></thead>";
 
 	echo "<tr>
-	<th scope='col'>Pages and Posts</th>
-	<th scope='col'>" . __($total_visitors, 'DailyStat') . "</th>
-	<th scope='col'>" . __($total_visitors_feeds, 'DailyStat') . "</th>
-	<th scope='col'>" . __($total_pageviews, 'DailyStat') . "</th>
-	<th scope='col'>" . __($total_pageviews_feeds, 'DailyStat') . "</th>";
+	<th scope='col'>All URL</th>
+	<th scope='col'>" . __($total_visitors, 'statpressV') . "</th>
+	<th scope='col'>" . __($total_visitors_feeds, 'statpressV') . "</th>
+	<th scope='col'>" . __($total_pageviews, 'statpressV') . "</th>
+	<th scope='col'>" . __($total_pageviews_feeds, 'statpressV') . "</th>";
 	if ($spider == '')
-		echo "<th scope='col'>" . __($total_spiders, 'DailyStat') . "</th>
+		echo "<th scope='col'>" . __($total_spiders, 'statpressV') . "</th>
 			</tr>";
 	$i = 0;
 
 	foreach ($posts as $p)
 	{ if (($i >= $LimitValueArticles) and ($i < $LimitValueArticles+$NumberDisplayPost))
 		{
-		echo "<tr>
-			<td>" . ($p[post_type]=='page' ? "[page]&#58;&nbsp;".$p['post_title'] : $p['post_title'])."</td>";
-		echo "<td>" . $p['visitors']. "</td>
+		echo "<td>" . ($p[post_type]=='page' ? "[page]&#58;&nbsp;".$p['post_title'] : $p['post_title'])."</td>
+			<td>" . $p['visitors']. "</td>
 			<td>" . $p['visitors_feeds'] . "</td>
 			<td>" . $p['pageviews']. "</td>
 			<td>" . $p['pageviews_feeds'] . "</td>";
@@ -1493,7 +1521,7 @@ echo "<strong>"; _e(" (" . $NumberPosts . " posts/pages)");echo" </strong>";
 	luc_DailyStat_load_time();
 }
 
-function requete_yesterday($count, $where_one, $where_two, $yesterday)
+function requete_day($count, $where_one, $where_two, $yesterday)
 {
 	global $wpdb;
 	$table_name = DAILYSTAT_TABLE_NAME;
@@ -1545,7 +1573,7 @@ function luc_dailystat_referrer()
 						    ");					   
 		$NumberArticles = $wpdb->num_rows;
 
-		 $LIMITArticles = 10;
+		 $LIMITArticles = 100;
 		 $NA = ceil($NumberArticles / $LIMITArticles);
 		 $LimitValueArticles = ($pa-1) * $LIMITArticles;
 	 
@@ -2390,25 +2418,6 @@ function luc_BanIP($ip)
 	}
 }
 
-function luc_BanBot($type, $info)
-{
-	global $wpdb;
-	$table_name = DAILYSTAT_TABLE_NAME;
-
-	if ($type == 'ip')
-		$cond = "WHERE ip = '$info'";
-	else
-		return false; // trap badness
-
-	$qry_u = "UPDATE $table_name
-					SET spider = 'Spam Bot'
-					$cond ;";
-
-	$wpdb->query($qry_u);
-
-	echo "Existing records in database for IP address " . $info . " now labled as 'Spam Bot' <br>";
-}
-
 function luc_print_uas($array)
 {
 	foreach ($array as $a)
@@ -2437,9 +2446,6 @@ function luc_display_by_IP($ip)
 				";
 	$qrya = $wpdb->get_results($qry_sa);
 
-	if ($_POST['markbot'] == 'Mark as spambot')
-		luc_BanBot('ip', $ip);
-
 	if ($_POST['banip'] == 'Ban IP address')
 		luc_BanIP($ip);
 
@@ -2448,10 +2454,6 @@ function luc_display_by_IP($ip)
 	<form method=post>
 		<div class='wrap'><table style="width:100%"><tr><td><h2> <?php _e($text) ?> </h2></td>
 
-		<td align='right'>
-			<input type=submit
-				name=markbot value='Mark as spambot' >
-		</td>
 		<td width=50px align='right'>
 			<input type=submit
 				name=banip value='Ban IP address' >

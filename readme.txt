@@ -5,7 +5,7 @@ Donate link: https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_i
 Tags: stats, statistics, widget, admin, sidebar, visits, visitors, pageview, feed, referrer, spy, spider, bot, page, post
 Requires at least: 2.8
 Tested up to: 3.4
-Stable Tag: 1.5.0.1
+Stable Tag: 1.5.1
 
 A fork of Statpress Visitors for very limited space like there is in Free hosting.
 
@@ -187,6 +187,17 @@ Please visit the http://additifstabac.free.fr/index.php/daily-stat-new-statistic
 http://www.flickr.com/photos/59604063@N05/sets/72157626523354350/
 
 == Changelog ==
+= 1.5.1 =
+Add option to collect visits from all logged-in users, plus anonymous users, but NOT admin users as in StatPress Visitors.
+
+= 1.5.0.4 =
+Correct bugs on widgets
+
+= 1.5.0.3 =
+Re do 1.5.0.2 
+
+= 1.5.0.2 =
+bug on useless function SpamBot
 
 = 1.5.0.1= 
 * Renamed the function "message" to avoid incompatibilities between plugins. 
