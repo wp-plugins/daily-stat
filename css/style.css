@@ -1,6 +1,0 @@
-body {
-	word-wrap: break-word; /* cesure sur les liens dépassant dans la sidebar */
-	-webkit-hyphens: auto;
-	-moz-hyphens: auto;
-	hyphens: auto;
-	}
