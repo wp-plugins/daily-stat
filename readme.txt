@@ -4,7 +4,7 @@ Contributors: luciole135
 Donate link: https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=F9J2LJPDE5UQ8
 Tags: stats, statistics, widget, admin, sidebar, visits, visitors, pageview, feed, referrer, spy, spider, bot, page, post
 Requires at least: 2.8
-Tested up to: 3.5
+Tested up to: 4.3
 Stable Tag: 1.5.5
 
 A fork of Statpress Visitors for very limited space like there is in Free hosting.
